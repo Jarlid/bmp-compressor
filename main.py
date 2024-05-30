@@ -27,6 +27,34 @@ def simple(matrix):
     return u, np.sqrt(eigen_values), eigen_vectors.T
 
 
+EPS = 0.1
+MAX_ITERATIONS = 17
+
+
+def advanced_constructor(permitted_amount):
+    def v_part():
+        tmp = np.random.normal(size=permitted_amount)
+        return tmp / np.linalg.norm(tmp)
+
+    def advanced(matrix):
+        v = np.matrix([v_part() for _ in range(matrix.shape[1])])
+
+        for _ in range(MAX_ITERATIONS):
+            q, _ = np.linalg.qr(matrix @ v)
+            u = np.matrix(q[:, 0:permitted_amount])
+
+            q, r = np.linalg.qr(matrix.T @ u)
+            v = np.matrix(q[:, 0:permitted_amount])
+            s = np.matrix(r[0:permitted_amount, 0:permitted_amount])
+
+            if np.linalg.norm(matrix @ v - u * s) < EPS:
+                break
+
+        return u, np.diagonal(s).astype(DTYPE), v.T
+
+    return advanced
+
+
 def compress(input_filename, output_filename, function_name, n):
     image = Image.open(input_filename)
 
@@ -39,7 +67,7 @@ def compress(input_filename, output_filename, function_name, n):
     elif function_name == "simple":
         func = simple
     elif function_name == "advanced":
-        exit(876363467)
+        func = advanced_constructor(permitted_amount)
     else:
         exit(328472344)
 
