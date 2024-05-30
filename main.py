@@ -4,6 +4,8 @@ from PIL import Image
 
 import numpy as np
 
+from time import time
+
 STYPE = np.uint32
 DTYPE = np.float32
 INT_SIZE = FLOAT_SIZE = 4
@@ -75,6 +77,8 @@ def compress(input_filename, output_filename, function_name, n):
     svd_ss = [None] * 3
     svd_vhs = [None] * 3
 
+    start_time = time()
+
     for color in range(3):
         color_matrix = np.array(image, dtype=np.float64)[:, :, color]
         if height > width:
@@ -85,6 +89,9 @@ def compress(input_filename, output_filename, function_name, n):
         svd_us[color] = svd_us[color][:, :permitted_amount]
         svd_ss[color] = svd_ss[color][:permitted_amount]
         svd_vhs[color] = svd_vhs[color][:permitted_amount, :]
+
+    end_time = time()
+    print(f"Timedelta (s): {end_time - start_time}")
 
     compressed_data = bytearray()
     compressed_data.extend(STYPE(width).tobytes())
