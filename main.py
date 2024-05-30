@@ -10,17 +10,34 @@ INT_SIZE = FLOAT_SIZE = 4
 IMAGE_INT_SIZE = 1
 
 
+def standard(matrix):
+    return np.linalg.svd(matrix, full_matrices=False)
+
+
+def simple(matrix):
+    eigen_values, eigen_vectors = np.linalg.eig(np.dot(matrix.T, matrix))
+
+    sorted_indices = np.argsort(eigen_values)[::-1]
+    eigen_values = eigen_values[sorted_indices]
+    eigen_vectors = eigen_vectors[:, sorted_indices]
+
+    u = np.dot(matrix, eigen_vectors)
+    u /= np.linalg.norm(u, axis=0)
+
+    return u, np.sqrt(eigen_values), eigen_vectors.T
+
+
 def compress(input_filename, output_filename, function_name, n):
     image = Image.open(input_filename)
 
-    height, width = image.size
+    width, height = image.size
     permitted_amount = (width * height * IMAGE_INT_SIZE) // ((width + 1 + height) * INT_SIZE * n) - 1
 
     function_name = function_name.lower()
     if function_name == "standard":
-        func = np.linalg.svd
+        func = standard
     elif function_name == "simple":
-        exit(459845723)
+        func = simple
     elif function_name == "advanced":
         exit(876363467)
     else:
@@ -30,22 +47,26 @@ def compress(input_filename, output_filename, function_name, n):
     svd_ss = [None] * 3
     svd_vhs = [None] * 3
 
-    for i in range(3):
-        svd_us[i], svd_ss[i], svd_vhs[i] = func(np.array(image, dtype=DTYPE)[:, :, i], full_matrices=False)
+    for color in range(3):
+        color_matrix = np.array(image, dtype=np.float64)[:, :, color]
+        if height > width:
+            color_matrix = color_matrix.T
 
-        svd_us[i] = svd_us[i][:, :permitted_amount]
-        svd_ss[i] = svd_ss[i][:permitted_amount]
-        svd_vhs[i] = svd_vhs[i][:permitted_amount, :]
+        svd_us[color], svd_ss[color], svd_vhs[color] = func(color_matrix)
+
+        svd_us[color] = svd_us[color][:, :permitted_amount]
+        svd_ss[color] = svd_ss[color][:permitted_amount]
+        svd_vhs[color] = svd_vhs[color][:permitted_amount, :]
 
     compressed_data = bytearray()
-    compressed_data.extend(STYPE(height).tobytes())
     compressed_data.extend(STYPE(width).tobytes())
+    compressed_data.extend(STYPE(height).tobytes())
     compressed_data.extend(STYPE(permitted_amount).tobytes())
 
-    for i in range(3):
-        compressed_data.extend(svd_us[i].astype(dtype=DTYPE).tobytes())
-        compressed_data.extend(svd_ss[i].astype(dtype=DTYPE).tobytes())
-        compressed_data.extend(svd_vhs[i].astype(dtype=DTYPE).tobytes())
+    for color in range(3):
+        compressed_data.extend(svd_us[color].astype(dtype=DTYPE).tobytes())
+        compressed_data.extend(svd_ss[color].astype(dtype=DTYPE).tobytes())
+        compressed_data.extend(svd_vhs[color].astype(dtype=DTYPE).tobytes())
 
     with open(output_filename, 'wb') as file:
         file.write(compressed_data)
@@ -59,21 +80,29 @@ def decompress(input_filename, output_filename):
     height = int(np.frombuffer(data, offset=INT_SIZE, dtype=STYPE, count=1)[0])
     amount = int(np.frombuffer(data, offset=2 * INT_SIZE, dtype=STYPE, count=1)[0])
 
+    rotate = False
+    if height > width:
+        height, width = width, height
+        rotate = True
+
     offset = 3 * INT_SIZE
 
     decompressed_data = [None] * 3
 
     for i in range(3):
-        svd_u = np.frombuffer(data, offset=offset, dtype=DTYPE, count=width * amount).reshape((width, amount))
+        svd_u = np.frombuffer(data, offset=offset, dtype=DTYPE, count=height * amount).reshape((height, amount))
         offset += svd_u.size * FLOAT_SIZE
 
         svd_s = np.diag(np.frombuffer(data, offset=offset, dtype=DTYPE, count=amount))
         offset += amount * FLOAT_SIZE
 
-        svd_vh = np.frombuffer(data, offset=offset, dtype=DTYPE, count=height * amount).reshape((amount, height))
+        svd_vh = np.frombuffer(data, offset=offset, dtype=DTYPE, count=width * amount).reshape((amount, width))
         offset += svd_vh.size * FLOAT_SIZE
 
         decompressed_data[i] = svd_u @ svd_s @ svd_vh
+
+        if rotate:
+            decompressed_data[i] = decompressed_data[i].T
 
     image = Image.fromarray(np.uint8(np.stack((
         decompressed_data[0],
